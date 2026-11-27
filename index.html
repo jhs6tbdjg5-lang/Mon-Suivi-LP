@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#172c35">
+<title>Mon Suivi</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f6f5;color:#20343b;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:22px 17px 40px}
+header{display:flex;justify-content:space-between;align-items:center;margin:12px 0 25px}
+h1{font-size:25px;margin:0}
+h2{font-size:17px}
+small,.muted{color:#819096}
+.card{background:white;border-radius:18px;padding:20px;margin-bottom:15px;box-shadow:0 3px 15px #17343b0a}
+.total{background:#18343d;color:white}
+.total small{color:#c4d2d3}
+.amount{font-size:38px;font-weight:750;margin:12px 0}
+.progress{height:9px;background:#dce5e3;border-radius:20px;overflow:hidden;margin:14px 0}
+.bar{height:100%;background:#36b78b;width:0}
+input{width:100%;padding:14px;border:1px solid #dce4e2;border-radius:10px;font-size:16px;margin:7px 0 13px;background:white;color:#20343b}
+button{border:0;border-radius:11px;padding:13px 16px;font-size:15px;font-weight:650;cursor:pointer;background:#1e826b;color:white}
+button.secondary{background:#e8f0ee;color:#24564c}
+button.danger{background:#fff0ed;color:#b34c3d}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.actions button{font-size:13px;padding:9px 11px}
+.entry{padding:13px 0;border-bottom:1px solid #edf0ef;display:flex;justify-content:space-between;gap:8px}
+.entry:last-child{border:0}
+.entry strong{white-space:nowrap}
+nav{display:flex;gap:8px;margin-bottom:17px}
+nav button{flex:1}
+.hidden{display:none}
+label{font-size:13px;font-weight:650}
+</style>
+</head>
+<body>
+<header>
+<h1>Mon Suivi</h1>
+<span>📊</span>
+</header>
+ 
+<nav>
+<button onclick="show('home')">Accueil</button>
+<button class="secondary" onclick="show('history')">Historique</button>
+</nav>
+ 
+<section id="home">
+<div class="card total">
+<small id="month"></small>
+<div class="amount" id="total">0,00 €</div>
+<small id="goalText">Objectif : 0,00 €</small>
+<div class="progress"><div class="bar" id="bar"></div></div>
+<small id="percent">0 % atteint</small>
+</div>
+ 
+<div class="card">
+<h2>🎯 Objectif mensuel</h2>
+<label>Montant de l'objectif (€)</label>
+<input id="goal" type="number" min="0" step="0.01" placeholder="Ex : 2000,00">
+<button onclick="saveGoal()">Enregistrer l'objectif</button>
+</div>
+ 
+<div class="card">
+<h2>➕ Ajouter une valeur</h2>
+<label>Montant (€)</label>
+<input id="amount" type="number" step="0.01" placeholder="Ex : 125,50">
+<label>Commentaire</label>
+<input id="comment" type="text" maxlength="120" placeholder="Ex : Vente du jour">
+<button onclick="addEntry()">Ajouter au cumul</button>
+</div>
+ 
+<div class="card">
+<h2>Dernières saisies</h2>
+<div id="entries"></div>
+</div>
+</section>
+ 
+<section id="history" class="hidden">
+<div class="card">
+<h2>📅 Historique mensuel</h2>
+<div id="months"></div>
+</div>
+<div class="card hidden" id="detail"></div>
+</section>
+ 
+<div class="card">
+<h2>💾 Mes sauvegardes</h2>
+<p class="muted">Exporte régulièrement tes données pour les conserver en cas de changement de téléphone.</p>
+<div class="actions">
+<button onclick="backup()">Exporter mes données</button>
+<button class="secondary" onclick="document.getElementById('restore').click()">Restaurer</button>
+<input id="restore" class="hidden" type="file" accept=".json,application/json" onchange="restore(event)">
+</div>
+</div>
+ 
+<script>
+const KEY="mon-suivi-v1";
+const now=()=>new Date().toISOString().slice(0,7);
+let data=JSON.parse(localStorage.getItem(KEY)||'{"months":{}}');
+let selected=now();
+ 
+function monthData(k){
+if(!data.months[k])data.months[k]={goal:0,entries:[]};
+return data.months[k];
+}
+function save(){localStorage.setItem(KEY,JSON.stringify(data));}
+function money(n){return Number(n).toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" €";}
+function total(m){return m.entries.reduce((s,e)=>s+e.amount,0);}
+function formatMonth(k){
+return new Date(k+"-02").toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+}
+function show(page){
+document.getElementById("home").classList.toggle("hidden",page!=="home");
+document.getElementById("history").classList.toggle("hidden",page!=="history");
+if(page==="history")renderHistory();
+}
+function render(){
+let m=monthData(now()),t=total(m);
+document.getElementById("month").textContent=formatMonth(now());
+document.getElementById("total").textContent=money(t);
+document.getElementById("goalText").textContent="Objectif : "+money(m.goal);
+document.getElementById("goal").value=m.goal||"";
+let p=m.goal>0?t/m.goal*100:0;
+document.getElementById("bar").style.width=Math.min(100,p)+"%";
+document.getElementById("percent").textContent=p.toFixed(1).replace(".",",")+" % atteint";
+document.getElementById("entries").innerHTML=m.entries.length?
+[...m.entries].reverse().map(e=>`
+<div class="entry"><div><b>${escapeHTML(e.comment||"Sans commentaire")}</b><br><small>${new Date(e.date).toLocaleDateString("fr-FR")}</small></div>
+<div><strong>${money(e.amount)}</strong><div class="actions">
+<button class="secondary" onclick="editEntry('${e.id}')">Modifier</button>
+<button class="danger" onclick="deleteEntry('${e.id}')">Supprimer</button>
+</div></div></div>`).join(""):"<p class='muted'>Aucune saisie pour le moment.</p>";
+}
+function escapeHTML(s){
+return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function saveGoal(){
+let v=Number(document.getElementById("goal").value);
+if(!Number.isFinite(v)||v<0)return alert("Objectif invalide");
+monthData(now()).goal=v;save();render();
+}
+function addEntry(){
+let v=Number(document.getElementById("amount").value);
+let c=document.getElementById("comment").value.trim();
+if(!document.getElementById("amount").value||!Number.isFinite(v)||v<=0)return alert("Saisis un montant positif.");
+monthData(now()).entries.push({id:crypto.randomUUID(),amount:Math.round(v*100)/100,comment:c,date:new Date().toISOString()});
+document.getElementById("amount").value="";
+document.getElementById("comment").value="";
+save();render();
+}
+function editEntry(id){
+let m=monthData(now()),e=m.entries.find(x=>x.id===id);
+if(!e)return;
+let v=prompt("Nouveau montant :",e.amount.toFixed(2));
+if(v===null)return;
+v=Number(v.replace(",","."));
+if(!Number.isFinite(v)||v<=0)return alert("Montant invalide");
+let c=prompt("Commentaire :",e.comment);
+if(c===null)return;
+e.amount=Math.round(v*100)/100;e.comment=c.trim();save();render();
+}
+function deleteEntry(id){
+if(!confirm("Supprimer cette saisie ?"))return;
+let m=monthData(now());m.entries=m.entries.filter(e=>e.id!==id);save();render();
+}
+function renderHistory(){
+let keys=Object.keys(data.months).sort().reverse();
+document.getElementById("months").innerHTML=keys.length?keys.map(k=>{
+let m=monthData(k),t=total(m);
+return `<div class="entry"><div><b>${formatMonth(k)}</b><br><small>Objectif : ${money(m.goal)}</small></div><div><b>${money(t)}</b><br><button class="secondary" onclick="showDetail('${k}')">Détails</button></div></div>`;
+}).join(""):"<p class='muted'>Ton historique apparaîtra ici.</p>";
+}
+function showDetail(k){
+let m=monthData(k),el=document.getElementById("detail");
+el.classList.remove("hidden");
+el.innerHTML=`<h2>${formatMonth(k)}</h2><p>Total : <b>${money(total(m))}</b></p><p>Objectif : ${money(m.goal)}</p><p>${m.goal?Math.round(total(m)/m.goal*1000)/10:0} % atteint</p>`+
+m.entries.map(e=>`<div class="entry"><span>${escapeHTML(e.comment||"Sans commentaire")}<br><small>${new Date(e.date).toLocaleDateString("fr-FR")}</small></span><b>${money(e.amount)}</b></div>`).join("");
+}
+function backup(){
+let blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+let a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="mon-suivi-sauvegarde.json";a.click();URL.revokeObjectURL(a.href);
+}
+function restore(event){
+let file=event.target.files[0];if(!file)return;
+let reader=new FileReader();
+reader.onload=()=>{
+try{
+let d=JSON.parse(reader.result);
+if(!d.months||typeof d.months!=="object")throw Error();
+for(let m of Object.values(d.months)){
+if(!Array.isArray(m.entries)||!Number.isFinite(m.goal)||m.goal<0)throw Error();
+for(let e of m.entries)if(!Number.isFinite(e.amount)||e.amount<=0||typeof e.id!=="string")throw Error();
+}
+if(confirm("Remplacer les données actuelles par cette sauvegarde ?")){
+data=d;save();render();show("home");
+}
+}catch(e){alert("Fichier de sauvegarde invalide.");}
+};
+reader.readAsText(file);event.target.value="";
+}
+monthData(now());save();render();
+</script>
+</body>
+</html>
