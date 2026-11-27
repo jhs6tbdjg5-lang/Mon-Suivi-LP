@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#172c35">
 <title>Mon Suivi</title>
+ <link rel="manifest" href="./manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f3f6f5;color:#20343b;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:22px 17px 40px}
@@ -201,4 +204,11 @@ reader.readAsText(file);event.target.value="";
 monthData(now());save();render();
 </script>
 </body>
+ <script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js");
+  });
+}
+</script>
 </html>
